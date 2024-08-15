@@ -1,17 +1,52 @@
 const express = require('express');
 const multer = require('multer');
 const fs = require('fs');
+const path = require('path');
 const { Dropbox } = require('dropbox');
 const axios = require('axios');
-const path = require('path');
+require('dotenv').config(); // Для загрузки переменных окружения из .env файла
 
 const app = express();
 const upload = multer({ dest: 'uploads/' });
 
+// Функция для создания файла .env, если его нет
+function createEnvFileIfNotExists() {
+    const envFilePath = path.resolve(__dirname, '.env');
+    if (!fs.existsSync(envFilePath)) {
+        fs.writeFileSync(envFilePath, ''); // Создаем пустой файл .env
+    }
+}
+
+// Вызов функции для создания .env файла
+createEnvFileIfNotExists(); // Убедитесь, что файл существует до загрузки переменных
+
+// Теперь загружаем переменные окружения
+require('dotenv').config();
+
 // Dropbox App credentials
-const CLIENT_ID = 'y05vg1oa6gma0vw';
-const CLIENT_SECRET = 'kjdnq9xr0uzcih0';
-let ACCESS_TOKEN = ''; // Должен быть обновлен после получения через авторизацию
+const CLIENT_ID = process.env.CLIENT_ID || 'y05vg1oa6gma0vw';
+const CLIENT_SECRET = process.env.CLIENT_SECRET || 'kjdnq9xr0uzcih0';
+let ACCESS_TOKEN = process.env.ACCESS_TOKEN || ''; // Загружается из переменной окружения
+
+// Функция для записи переменной окружения в .env файл
+function updateEnvVar(key, value) {
+    const envFilePath = path.resolve(__dirname, '.env');
+    const envVars = fs.readFileSync(envFilePath, 'utf8').split('\n');
+    const newEnvVars = envVars.map(line => 
+        line.startsWith(`${key}=`) ? `${key}=${value}` : line
+    );
+    if (!newEnvVars.find(line => line.startsWith(`${key}=`))) {
+        newEnvVars.push(`${key}=${value}`);
+    }
+    fs.writeFileSync(envFilePath, newEnvVars.join('\n'));
+}
+
+// Функция для обновления ACCESS_TOKEN и сохранения в .env файл
+function updateAccessToken(newToken) {
+    ACCESS_TOKEN = newToken;
+    updateEnvVar('ACCESS_TOKEN', newToken);
+    console.log('Access token updated and saved to environment variables.');
+}
 
 // Инициализация Dropbox клиента
 function initDropbox() {
@@ -24,7 +59,7 @@ function checkAuthorization(req, res, next) {
         return res.status(401).send('User not authorized. Please <a href="/auth">authorize</a> the application first.');
     }
     next();
-};
+}
 
 // Функция для очистки папки uploads
 function clearUploadsFolder() {
@@ -67,7 +102,7 @@ app.get('/auth/callback', async (req, res) => {
             },
         });
 
-        ACCESS_TOKEN = response.data.access_token;
+        updateAccessToken(response.data.access_token); // Сохранение токена в переменную окружения и .env файл
         console.log('Authorization successful:', response.data);
         res.redirect('/');
     } catch (error) {
